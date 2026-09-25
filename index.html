@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>難読駅名クイズ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&family=M+PLUS+1p:wght@500;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'M PLUS 1p', 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            touch-action: manipulation;
+        }
+        .board-gradient {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        }
+        .station-sign {
+            background: #ffffff;
+            border: 8px solid #007736;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            color: #1e293b;
+        }
+        .char-box {
+            transition: all 0.15s ease-in-out;
+        }
+        .char-box.active {
+            border-color: #3b82f6;
+            box-shadow: 0 0 12px rgba(59, 130, 246, 0.6);
+            transform: scale(1.05);
+        }
+        .char-box.filled {
+            background-color: #eff6ff;
+            color: #1d4ed8;
+            border-color: #60a5fa;
+        }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1.02); opacity: 1; }
+            100% { transform: scale(0.95); opacity: 0.8; }
+        }
+        .pulse-anim {
+            animation: pulse-ring 2s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between items-center p-2 md:p-6 select-none overflow-x-hidden">
+
+    <!-- ヘッダー -->
+    <header class="w-full max-w-2xl flex justify-between items-center py-2 px-4 bg-slate-800/80 backdrop-blur rounded-xl border border-slate-700">
+        <h1 class="text-xl md:text-2xl font-black tracking-wider text-emerald-400 flex items-center gap-2">
+            <span>🚉</span> 日本全国 難読駅名クイズ
+        </h1>
+        <div id="high-score-display" class="text-xs md:text-sm font-bold text-amber-400 bg-amber-950/50 px-3 py-1 rounded-full border border-amber-600/50">
+            BEST: 0 pt
+        </div>
+    </header>
+
+    <!-- メインコンテンツ -->
+    <main class="w-full max-w-2xl my-auto flex flex-col items-center justify-center gap-4 py-2">
+
+        <!-- スタート画面 -->
+        <div id="screen-start" class="w-full bg-slate-800/90 rounded-2xl p-6 md:p-8 border border-slate-700 text-center shadow-2xl flex flex-col items-center">
+            <div class="text-6xl mb-3">🪧</div>
+            <h2 class="text-2xl md:text-3xl font-black mb-3 text-white">全国難読駅名マスター</h2>
+            <p class="text-slate-300 text-sm md:text-base mb-6 leading-relaxed">
+                実在する超難読駅名（全10問）の読みを「ひらがな」で入力しよう！<br>
+                キーボードの直接入力（ローマ字）／日本語フリック入力の両方に対応。
+            </p>
+
+            <button id="btn-start" class="w-full max-w-xs py-4 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-black text-xl rounded-xl shadow-lg transition duration-150 transform active:scale-95 mb-4 border-b-4 border-emerald-800">
+                ゲームスタート
+            </button>
+
+            <button id="btn-ranking" class="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-bold rounded-lg transition">
+                🏆 過去のハイスコア
+            </button>
+        </div>
+
+        <!-- ゲーム画面 -->
+        <div id="screen-game" class="w-full hidden flex-col items-center gap-3">
+            
+            <!-- ステータスバー -->
+            <div class="w-full flex justify-between items-center px-2 text-sm font-bold">
+                <div id="q-counter" class="text-emerald-400 bg-slate-800 px-3 py-1 rounded-lg border border-slate-700">第 1 / 10 問</div>
+                <div id="score-counter" class="text-amber-400 bg-slate-800 px-3 py-1 rounded-lg border border-slate-700">スコア: 0</div>
+            </div>
+
+            <!-- タイマーバー -->
+            <div class="w-full bg-slate-800 rounded-full h-4 p-0.5 border border-slate-700 overflow-hidden relative">
+                <div id="timer-bar" class="bg-gradient-to-r from-emerald-500 to-amber-500 h-full rounded-full transition-all duration-100 w-full"></div>
+                <span id="timer-text" class="absolute inset-0 flex items-center justify-center text-[10px] font-black text-white drop-shadow">20.0 秒</span>
+            </div>
+
+            <!-- 駅名標 (Canvas) -->
+            <div class="w-full relative">
+                <canvas id="station-canvas" width="600" height="280" class="w-full h-auto rounded-2xl shadow-xl border-4 border-emerald-700 bg-white"></canvas>
+            </div>
+
+            <!-- ヒントボタンエリア -->
+            <div class="w-full grid grid-cols-3 gap-2">
+                <button id="hint-1-btn" onclick="useHint(1)" class="py-2 px-1 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-amber-300 text-xs font-bold rounded-lg transition text-center">
+                    💡 ヒント1<br><span class="text-[10px] text-slate-400">文字数/頭文字 (-100pt)</span>
+                </button>
+                <button id="hint-2-btn" onclick="useHint(2)" class="py-2 px-1 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-amber-300 text-xs font-bold rounded-lg transition text-center">
+                    💡 ヒント2<br><span class="text-[10px] text-slate-400">路線情報 (-150pt)</span>
+                </button>
+                <button id="hint-3-btn" onclick="useHint(3)" class="py-2 px-1 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-amber-300 text-xs font-bold rounded-lg transition text-center">
+                    💡 ヒント3<br><span class="text-[10px] text-slate-400">隣の駅名 (-200pt)</span>
+                </button>
+            </div>
+            <!-- ヒント表示領域 -->
+            <div id="hint-display" class="w-full hidden bg-amber-950/40 border border-amber-600/40 rounded-lg p-2 text-xs text-amber-200 text-center font-bold"></div>
+
+            <!-- 解答マス目表示領域 -->
+            <div id="answer-boxes" class="w-full flex justify-center items-center gap-1.5 py-2 my-1 overflow-x-auto">
+                <!-- JavaScriptで動的生成 -->
+            </div>
+
+            <!-- 入力用非表示/可視化 input -->
+            <div class="w-full flex gap-2 items-center">
+                <input id="answerInput" type="text" autocomplete="off" spellcheck="false" 
+                       class="w-full bg-slate-800 border-2 border-emerald-500/80 focus:border-emerald-400 text-white font-bold text-center text-lg py-2.5 px-4 rounded-xl focus:outline-none shadow-inner"
+                       placeholder="ここにひらがな/ローマ字を入力" />
+                <button id="btn-clear" onclick="clearInput()" class="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold rounded-xl text-sm whitespace-nowrap border border-slate-600">
+                    消去
+                </button>
+            </div>
+
+            <!-- 送信/パス -->
+            <div class="w-full flex gap-2">
+                <button id="btn-submit" onclick="checkAnswer()" class="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl shadow border-b-4 border-emerald-800 text-base">
+                    判定する (Enter)
+                </button>
+                <button id="btn-skip" onclick="skipQuestion()" class="px-4 py-3 bg-rose-900/60 hover:bg-rose-800/80 border border-rose-700 text-rose-200 font-bold rounded-xl text-sm whitespace-nowrap">
+                    パス
+                </button>
+            </div>
+        </div>
+
+        <!-- リザルト画面 -->
+        <div id="screen-result" class="w-full hidden bg-slate-800/90 rounded-2xl p-6 border border-slate-700 shadow-2xl flex-col items-center text-center">
+            <h2 class="text-3xl font-black text-amber-400 mb-1">RESULT</h2>
+            <div id="result-score" class="text-4xl font-black text-white mb-4">0 <span class="text-lg font-normal text-slate-300">点</span></div>
+            
+            <div id="result-evaluation" class="text-lg font-bold text-emerald-300 mb-4 bg-slate-900/60 px-4 py-2 rounded-lg border border-slate-700"></div>
+
+            <!-- 振り返りリスト -->
+            <div class="w-full max-h-56 overflow-y-auto mb-6 bg-slate-900/80 rounded-xl p-3 border border-slate-700 text-left">
+                <h3 class="text-xs font-bold text-slate-400 mb-2 border-b border-slate-800 pb-1">今回の出題結果</h3>
+                <div id="review-list" class="space-y-2 text-xs"></div>
+            </div>
+
+            <div class="w-full flex gap-3">
+                <button id="btn-retry" class="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-base rounded-xl shadow border-b-4 border-emerald-800">
+                    もう一度挑戦
+                </button>
+                <button id="btn-title" class="flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-base rounded-xl border border-slate-600">
+                    タイトルへ
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- 正解/不正解オーバーレイ -->
+    <div id="overlay-result" class="fixed inset-0 pointer-events-none flex items-center justify-center opacity-0 transition-opacity duration-200 z-50">
+        <div id="overlay-mark" class="text-9xl font-black drop-shadow-2xl">⭕</div>
+    </div>
+
+    <!-- 音響コンテキスト & ゲームスクリプト -->
+    <script>
+        // 完全対応型 ローマ字 -> ひらがな テーブル
+        const ROMAJI_TABLE = {
+            'a':'あ','i':'い','u':'う','e':'え','o':'お',
+            'ka':'か','ki':'き','ku':'く','ke':'け','ko':'こ',
+            'sa':'さ','shi':'し','si':'し','su':'す','se':'せ','so':'そ',
+            'ta':'た','chi':'ち','ti':'ち','tsu':'つ','tu':'つ','te':'て','to':'と',
+            'na':'な','ni':'に','nu':'ぬ','ne':'ね','no':'の',
+            'ha':'は','hi':'ひ','fu':'ふ','hu':'ふ','he':'へ','ho':'ほ',
+            'ma':'ま','mi':'み','mu':'む','me':'め','mo':'も',
+            'ya':'や','yu':'ゆ','yo':'よ',
+            'ra':'ら','ri':'り','ru':'る','re':'れ','ro':'ろ',
+            'wa':'わ','wo':'を','nn':'ん',"n'":'ん',
+            'ga':'が','gi':'ぎ','gu':'ぐ','ge':'げ','go':'ご',
+            'za':'ざ','ji':'じ','zi':'じ','zu':'ず','ze':'ぜ','zo':'ぞ',
+            'da':'だ','di':'ぢ','du':'づ','de':'で','do':'ど',
+            'ba':'ば','bi':'び','bu':'ぶ','be':'べ','bo':'ぼ',
+            'pa':'ぱ','pi':'ぴ','pu':'ぷ','pe':'ぺ','po':'ぽ',
+            'kya':'きゃ','kyu':'きゅ','kyo':'きょ',
+            'sha':'しゃ','shu':'しゅ','sho':'しょ','sya':'しゃ','syu':'しゅ','syo':'しょ',
+            'cha':'ちゃ','chu':'ちゅ','cho':'ちょ','cya':'ちゃ','cyu':'ちゅ','cyo':'ちょ',
+            'nya':'にゃ','nyu':'にゅ','nyo':'にょ',
+            'hya':'ひゃ','hyu':'ひゅ','hyo':'ひょ',
+            'mya':'みゃ','myu':'みゅ','myo':'みょ',
+            'rya':'りゃ','ryu':'りゅ','ryo':'りょ',
+            'gya':'ぎゃ','gyu':'ぎゅ','gyo':'ぎょ',
+            'ja':'じゃ','ju':'じゅ','jo':'じょ','jya':'じゃ','jyu':'じゅ','jyo':'じょ','zya':'じゃ','zyu':'じゅ','zyo':'じょ',
+            'bya':'びゃ','byu':'びゅ','byo':'びょ',
+            'pya':'ぴゃ','pyu':'ぴゅ','pyo':'ぴょ',
+            'fa':'ふぁ','fi':'ふぃ','fe':'ふぇ','fo':'ふぉ',
+            'va':'ゔぁ','vi':'ゔぃ','vu':'ゔ','ve':'ゔぇ','vo':'ゔぉ',
+            'xa':'ぁ','xi':'ぃ','xu':'ぅ','xe':'ぇ','xo':'ぉ','xtu':'っ','xtsu':'っ'
+        };
+
+        // 実在する難読駅データリスト
+        const STATIONS = [
+            { kanji: "特牛", kana: "こっとい", pref: "山口県", line: "JR山陰本線", prev: "阿川", next: "滝部", desc: "「琴江（ことえ）」が訛った説や、雌牛を指す方言「コトイ」に由来すると言われます。" },
+            { kanji: "及位", kana: "のぞき", pref: "山形県", line: "JR奥羽本線", prev: "院内", next: "真室川", desc: "修験者が崖から吊り下げられて洞窟を覗く修行を行ったことに由来します。" },
+            { kanji: "大嵐", kana: "おおぞれ", pref: "静岡県", line: "JR飯田線", prev: "小和田", next: "水窪", desc: "崖崩れ（オオゾレ）が起きやすい地形から名付けられたと伝えられています。" },
+            { kanji: "半家", kana: "はげ", pref: "高知県", line: "JR予土線", prev: "十川", next: "江川崎", desc: "平家の落人が追手を逃れるため「平」の字の冠を下げて「半」とした説があります。" },
+            { kanji: "飯給", kana: "いたぶ", pref: "千葉県", line: "小湊鐵道線", prev: "里見", next: "月崎", desc: "壬申の乱で敗れた弘文天皇の御庵に飯を給給したという故事に由来します。" },
+            { kanji: "求名", kana: "ぐみょう", pref: "千葉県", line: "JR東金線", prev: "東金", next: "成東", desc: "真言宗の修行法「求聞持法（ぐもんじほう）」に由来すると言われます。" },
+            { kanji: "廿日市", kana: "はつかいち", pref: "広島県", line: "JR山陽本線", prev: "宮島口", next: "新井口", desc: "中世より毎月20日に市が立つ交易の場であったことに由来します。" },
+            { kanji: "十三", kana: "じゅうそう", pref: "大阪府", line: "阪急電鉄", prev: "梅田", next: "神崎川", desc: "条里制の単位、あるいは淀川の上流から13番目の渡船場だった等諸説あります。" },
+            { kanji: "放出", kana: "はなてん", pref: "大阪府", line: "JR片町線", prev: "鴫野", next: "徳庵", desc: "古代に湖水を旧淀川へ「放ち出でる」地点（放出口）だったことに由来します。" },
+            { kanji: "軍畑", kana: "いくさばた", pref: "東京都", line: "JR青梅線", prev: "沢井", next: "二俣尾", desc: "1563年に辛垣城主三田氏と北条氏照が激突した古戦場であったことに由来します。" },
+            { kanji: "驫木", kana: "とどろき", pref: "青森県", line: "JR五能線", prev: "追良瀬", next: "風合瀬", desc: "波の音が響き渡り、3頭の馬も驚いて轟く（とどろく）様子に由来します。" },
+            { kanji: "喜々津", kana: "ききつ", pref: "長崎県", line: "JR長崎本線", prev: "市布", next: "東園", desc: "昔この地を訪れた喜々津殿の伝説や、喜ばしい港（津）を意味するとされます。" },
+            { kanji: "九品仏", kana: "くほんぶつ", pref: "東京都", line: "東急大井町線", prev: "自由が丘", next: "尾山台", desc: "駅前にある浄真寺に安置された9体の阿弥陀如来像（九品仏）に由来します。" },
+            { kanji: "五十猛", kana: "いたけ", pref: "島根県", line: "JR山陰本線", prev: "仁万", next: "大田市", desc: "日本神話に登場する素戔嗚尊の子「五十猛命（イソタケルノミコト）」に由来。" },
+            { kanji: "麻生津", kana: "あそうづ", pref: "福井県", line: "福井鉄道", prev: "浅水", next: "ハーモニーホール", desc: "阿蘇の津（港）から転じたという説や麻が自生していた港に由来する説があります。" },
+            { kanji: "網引", kana: "あびき", pref: "兵庫県", line: "北条鉄道", prev: "田原", next: "法華口", desc: "合戦の際に池に沈んだ兜を網で引き上げたという伝説に由来します。" },
+            { kanji: "財田", kana: "さいた", pref: "香川県", line: "JR土讃線", prev: "坪尻", next: "讃岐財田", desc: "肥沃で実り豊かな田畑が広がっていたことに由来する地名です。" },
+            { kanji: "打出", kana: "うちで", pref: "兵庫県", line: "阪神本線", prev: "香櫨園", next: "芦屋", desc: "打ち出の小槌伝説や、西国街道の打ち出し（出発地）だったことに由来します。" },
+            { kanji: "宝積寺", kana: "ほうしゃくじ", pref: "栃木県", line: "JR東北本線", prev: "岡本", next: "氏家", desc: "宝物を積んだ寺院という意味の縁起の良い地名・寺院名に由来します。" },
+            { kanji: "馬下", kana: "まおろし", pref: "新潟県", line: "JR磐越西線", prev: "猿和田", next: "咲花", desc: "菅名岳の修験者が馬を下りて徒歩で登ったことに由来します。" },
+            { kanji: "倶知安", kana: "くっちゃん", pref: "北海道", line: "JR函館本線", prev: "比羅夫", next: "小沢", desc: "アイヌ語の「クッ・シャン・ペツ」（管のような川をくだる流出口）に由来します。" },
+            { kanji: "虎杖浜", kana: "こじょうはま", pref: "北海道", line: "JR室蘭本線", prev: "登別", next: "竹浦", desc: "アイヌ語「クッタラ・ウシ」（イタドリのあるところ）の漢字意訳に由来します。" },
+            { kanji: "頴娃", kana: "えい", pref: "鹿児島県", line: "JR指宿枕崎線", prev: "入野", next: "西頴娃", desc: "古くは頴娃郡（えいぐん）と呼ばれ、イネ（穎）の発生地説など諸説あります。" },
+            { kanji: "安食", kana: "あじき", pref: "千葉県", line: "JR成田線", prev: "小林", next: "下総松崎", desc: "延喜式内の古社「安食神社」や「安穏に食す」地名に由来すると言われます。" },
+            { kanji: "酒々井", kana: "しすい", pref: "千葉県", line: "JR総武本線", prev: "佐倉", next: "榎戸", desc: "孝行息子の掘った井戸から酒が湧き出たという「酒の井伝説」に由来します。" },
+            { kanji: "大楽毛", kana: "おたのしけ", pref: "北海道", line: "JR根室本線", prev: "庶路", next: "新大楽毛", desc: "アイヌ語の「オ・タノスケ」（川口の砂浜の真ん中）に由来します。" },
+            { kanji: "音威子府", kana: "おといねっぷ", pref: "北海道", line: "JR宗谷本線", prev: "咲来", next: "筬島", desc: "アイヌ語の「オ・トイネ・プ」（泥深い川口）に由来します。" },
+            { kanji: "雄信内", kana: "おのっぷない", pref: "北海道", line: "JR宗谷本線", prev: "ぬかなん", next: "安牛", desc: "アイヌ語の「オ・ノプ・ナイ」（川尻に原野のある川）に由来します。" },
+            { kanji: "長万部", kana: "おしゃまんべ", pref: "北海道", line: "JR函館本線", prev: "中ノ沢", next: "静狩", desc: "アイヌ語の「オ・サマム・ペツ」（川尻が横になっている川）に由来します。" },
+            { kanji: "十弗", kana: "とおふつ", pref: "北海道", line: "JR根室本線", prev: "豊頃", next: "浦幌", desc: "アイヌ語の「ト・プツ」（沼の口）に由来。「10$」に見える看板でも知られます。" },
+            { kanji: "愛子", kana: "あやし", pref: "宮城県", line: "JR仙山線", prev: "葛岡", next: "陸前落合", desc: "子愛観音（あやしかんのん）が祀られていたことに由来する地名です。" },
+            { kanji: "北一已", kana: "きたいちやん", pref: "北海道", line: "JR留萌本線", prev: "深川", next: "秩父別", desc: "アイヌ語の「イチヤン」（鮭の産卵場）に由来します。" },
+            { kanji: "撫牛子", kana: "ないじょうし", pref: "青森県", line: "JR奥羽本線", prev: "弘前", next: "川部", desc: "アイヌ語の「ナイ・チャシ」（川の砦）に由来すると言われます。" },
+            { kanji: "妹背牛", kana: "もせうし", pref: "北海道", line: "JR函館本線", prev: "江部乙", next: "深川", desc: "アイヌ語の「モセ・ウシ」（イラクサの群生する場所）に由来します。" },
+            { kanji: "南風崎", kana: "はえのさき", pref: "長崎県", line: "JR大村線", prev: "早岐", next: "小串郷", desc: "「はえ」は南風を意味する方言で、南風を受ける岬に由来します。" },
+            { kanji: "七日町", kana: "なぬかまち", pref: "福島県", line: "JR只見線", prev: "会津若松", next: "西若松", desc: "毎月7の日に市（市場）が立っていたことに由来する地名です。" },
+            { kanji: "膳所", kana: "ぜぜ", pref: "滋賀県", line: "JR東海道本線", prev: "大津", next: "石山", desc: "天皇の御厨（御膳所）として魚介類を献上していたことに由来します。" },
+            { kanji: "木下", kana: "きおろし", pref: "千葉県", line: "JR成田線", prev: "布佐", next: "小林", desc: "香取神社の神木の下、または利根川の舟運の木下河岸に由来します。" },
+            { kanji: "相内", kana: "あいのうち", pref: "北海道", line: "JR石北本線", prev: "東相内", next: "留辺蘂", desc: "アイヌ語の「アイ・ヌプリ」（矢のような山）や「アイ・ウシ」に由来します。" },
+            { kanji: "高麗川", kana: "こまがわ", pref: "埼玉県", line: "JR八高線", prev: "東飯能", next: "毛呂", desc: "716年に渡来した高句麗の人々が移住して築いた高麗郡に由来します。" },
+            { kanji: "安足間", kana: "あんたろま", pref: "北海道", line: "JR石北本線", prev: "愛別", next: "中愛別", desc: "アイヌ語の「アンタル・オマ・プ」（淵のある川）に由来します。" },
+            { kanji: "日生", kana: "ひなせ", pref: "岡山県", line: "JR赤穂線", prev: "寒河", next: "伊里", desc: "「日干し（ひのし）」から転じた説や日当たりの良い土地に由来します。" },
+            { kanji: "比布", kana: "ぴっぷ", pref: "北海道", line: "JR宗谷本線", prev: "永山", next: "蘭留", desc: "アイヌ語の「ピピ」（石の多い場所）に由来します。" },
+            { kanji: "大歩危", kana: "おおぼけ", pref: "徳島県", line: "JR土讃線", prev: "小歩危", next: "繁藤", desc: "「大股で歩くと危険」という意味や切り立った崖地（ボケ）に由来します。" },
+            { kanji: "彼杵", kana: "そのぎ", pref: "長崎県", line: "JR大村線", prev: "千綿", next: "川棚", desc: "古代の「そのぎの郷」に由来し、長崎街道の宿場町として栄えました。" }
+        ];
+
+        let currentQuestions = [];
+        let qIndex = 0;
+        let score = 0;
+        let timer = null;
+        let timeLeft = 20.0;
+        let usedHints = [false, false, false];
+        let currentRawInput = ""; // ローマ字入力バッファ
+        let highScore = parseInt(localStorage.getItem('nandoku_highscore') || '0', 10);
+        let reviewData = [];
+
+        // オーディオコンテキスト
+        let audioCtx = null;
+        function initAudio() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        function playSound(type) {
+            if (!audioCtx) return;
+            try {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                
+                if (type === 'ok') {
+                    osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
+                    osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.1); // E5
+                    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.3);
+                } else if (type === 'ng') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(180, audioCtx.currentTime);
+                    osc.frequency.setValueAtTime(130, audioCtx.currentTime + 0.15);
+                    gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.35);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.35);
+                }
+            } catch(e){}
+        }
+
+        /**
+         * ローマ字バッファ文字列を正しく「ひらがな」に変換する関数
+         * 子音バッファが消去される問題を根本解決
+         */
+        function parseRomajiToHiragana(str) {
+            let src = str.toLowerCase();
+            let result = "";
+            let buf = "";
+
+            // 全角カタカナ/ひらがな正規化補助
+            src = src.replace(/[\u30a1-\u30f6]/g, function(match) {
+                return String.fromCharCode(match.charCodeAt(0) - 0x60);
+            });
+
+            for (let i = 0; i < src.length; i++) {
+                let ch = src[i];
+
+                // 既にひらがな・記号の場合はそのまま出力しバッファリセット
+                if (/[\u3040-\u309f]/.test(ch)) {
+                    if (buf === 'n') { result += 'ん'; buf = ''; }
+                    else if (buf.length > 0) { result += buf; buf = ''; }
+                    result += ch;
+                    continue;
+                }
+
+                // アルファベット以外
+                if (!/[a-z']/.test(ch)) {
+                    result += buf + ch;
+                    buf = "";
+                    continue;
+                }
+
+                buf += ch;
+
+                // 促音 (っ) 判定: 同じ子音が2つ並んだ場合 (例: kk, tt, ss) - nnを除く
+                if (buf.length === 2 && buf[0] === buf[1] && buf[0] !== 'n' && /[bcdfghjklmnpqrstvwxyz]/.test(buf[0])) {
+                    result += 'っ';
+                    buf = buf[1];
+                }
+
+                // 「n」単体の処理 (子音前のn / 撥音)
+                if (buf.length > 1 && buf[0] === 'n' && buf[1] !== 'y' && !/[aeiou']/.test(buf[1])) {
+                    result += 'ん';
+                    buf = buf.substring(1);
+                }
+
+                // 最長一致でテーブル照合 (3文字 -> 2文字 -> 1文字)
+                while (buf.length > 0) {
+                    let matched = false;
+                    for (let len = Math.min(buf.length, 4); len >= 1; len--) {
+                        let sub = buf.substring(0, len);
+                        if (ROMAJI_TABLE[sub]) {
+                            result += ROMAJI_TABLE[sub];
+                            buf = buf.substring(len);
+                            matched = true;
+                            break;
+                        }
+                    }
+                    if (!matched) break;
+                }
+            }
+
+            // 残存バッファの特別処理（末尾の'n'等）
+            if (buf === 'n' || buf === "n'") {
+                result += 'ん';
+            } else {
+                result += buf; // 変換途中のアルファベット
+            }
+
+            return result;
+        }
+
+        const answerInput = document.getElementById('answerInput');
+
+        // 入力イベント（IME・キーボード直入力どちらにも完全対応）
+        answerInput.addEventListener('input', (e) => {
+            if (!currentQuestions || qIndex < 0 || qIndex >= currentQuestions.length) return;
+            const st = STATIONS[currentQuestions[qIndex]];
+            if (!st) return;
+
+            const raw = answerInput.value;
+            const converted = parseRomajiToHiragana(raw);
+            
+            // マス目の更新
+            updateCharBoxes(converted);
+
+            // 文字数が問題の解答長に達したら自動チェック
+            if (converted === st.kana) {
+                checkAnswer();
+            }
+        });
+
+        // Enterキー押し下げ対応
+        answerInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                checkAnswer();
+            }
+        });
+
+        function clearInput() {
+            answerInput.value = "";
+            updateCharBoxes("");
+            answerInput.focus();
+        }
+
+        function drawStationSign(station) {
+            const canvas = document.getElementById('station-canvas');
+            const ctx = canvas.getContext('2d');
+
+            // クリア
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 背景
+            ctx.fillStyle = "#FFFFFF";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 外枠緑ライン
+            ctx.lineWidth = 14;
+            ctx.strokeStyle = "#007736";
+            ctx.strokeRect(7, 7, canvas.width - 14, canvas.height - 14);
+
+            // 中央ライン
+            ctx.fillStyle = "#007736";
+            ctx.fillRect(20, 160, canvas.width - 40, 8);
+
+            // 漢字駅名 (中央メイン)
+            ctx.fillStyle = "#111827";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.font = "900 64px 'M PLUS 1p', sans-serif";
+            ctx.fillText(station.kanji, canvas.width / 2, 95);
+
+            // 都道府県 & 路線名 (看板上部)
+            ctx.fillStyle = "#007736";
+            ctx.font = "bold 16px 'M PLUS 1p', sans-serif";
+            ctx.fillText(`[ ${station.pref} ]  ${station.line}`, canvas.width / 2, 32);
+
+            // 前の駅 / 次の駅 (矢印モチーフ)
+            ctx.fillStyle = "#4b5563";
+            ctx.font = "bold 18px 'M PLUS 1p', sans-serif";
+
+            // 前の駅（左）
+            ctx.textAlign = "left";
+            ctx.fillText(`⇦ ${station.prev}`, 35, 205);
+
+            // 次の駅（右）
+            ctx.textAlign = "right";
+            ctx.fillText(`${station.next} ⇨`, canvas.width - 35, 205);
+
+            // 由来解説（看板最下部）
+            ctx.fillStyle = "#6b7280";
+            ctx.textAlign = "center";
+            ctx.font = "500 13px 'M PLUS 1p', sans-serif";
+            let shortDesc = station.desc.length > 38 ? station.desc.substring(0, 37) + "…" : station.desc;
+            ctx.fillText(`【由来】${shortDesc}`, canvas.width / 2, 248);
+        }
+
+        document.getElementById('high-score-display').innerText = `BEST: ${highScore} pt`;
+
+        document.getElementById('btn-start').onclick = startGame;
+        document.getElementById('btn-retry').onclick = startGame;
+        document.getElementById('btn-title').onclick = showTitle;
+
+        function showTitle() {
+            document.getElementById('screen-start').classList.remove('hidden');
+            document.getElementById('screen-game').classList.add('hidden');
+            document.getElementById('screen-result').classList.add('hidden');
+        }
+
+        function startGame() {
+            initAudio();
+            score = 0;
+            qIndex = 0;
+            reviewData = [];
+
+            // 10問をランダム抽出
+            let indices = Array.from(Array(STATIONS.length).keys());
+            indices.sort(() => Math.random() - 0.5);
+            currentQuestions = indices.slice(0, 10);
+
+            document.getElementById('screen-start').classList.add('hidden');
+            document.getElementById('screen-result').classList.add('hidden');
+            document.getElementById('screen-game').classList.remove('hidden');
+            document.getElementById('screen-game').classList.add('flex');
+
+            loadQuestion();
+        }
+
+        function loadQuestion() {
+            clearInterval(timer);
+            usedHints = [false, false, false];
+            resetHintUI();
+
+            const st = STATIONS[currentQuestions[qIndex]];
+
+            // 各種表示更新
+            document.getElementById('q-counter').innerText = `第 ${qIndex + 1} / 10 問`;
+            document.getElementById('score-counter').innerText = `スコア: ${score}`;
+
+            // 駅看板描画
+            drawStationSign(st);
+
+            // マス目の構築
+            buildCharBoxes(st.kana.length);
+
+            // 入力クリア & フォーカス
+            clearInput();
+
+            // タイマー開始 (20秒)
+            timeLeft = 20.0;
+            updateTimerDisplay();
+            timer = setInterval(() => {
+                timeLeft -= 0.1;
+                if (timeLeft <= 0) {
+                    timeLeft = 0;
+                    updateTimerDisplay();
+                    clearInterval(timer);
+                    timeOut();
+                } else {
+                    updateTimerDisplay();
+                }
+            }, 100);
+        }
+
+        function updateTimerDisplay() {
+            const bar = document.getElementById('timer-bar');
+            const text = document.getElementById('timer-text');
+            const pct = Math.max(0, (timeLeft / 20.0) * 100);
+            bar.style.width = pct + "%";
+            text.innerText = `${timeLeft.toFixed(1)} 秒`;
+
+            if (pct < 30) {
+                bar.className = "bg-rose-600 h-full rounded-full transition-all duration-100";
+            } else {
+                bar.className = "bg-gradient-to-r from-emerald-500 to-amber-500 h-full rounded-full transition-all duration-100";
+            }
+        }
+
+        function buildCharBoxes(len) {
+            const container = document.getElementById('answer-boxes');
+            container.innerHTML = "";
+            for (let i = 0; i < len; i++) {
+                const box = document.createElement('div');
+                box.className = "char-box w-10 h-12 md:w-12 md:h-14 border-2 border-slate-600 bg-slate-800 rounded-lg flex items-center justify-center font-black text-xl md:text-2xl text-white shadow";
+                box.id = `box-${i}`;
+                box.innerText = "";
+                container.appendChild(box);
+            }
+        }
+
+        function updateCharBoxes(convertedText) {
+            if (!currentQuestions || qIndex < 0 || qIndex >= currentQuestions.length) return;
+            const st = STATIONS[currentQuestions[qIndex]];
+            if (!st || !st.kana) return;
+
+            const maxLen = st.kana.length;
+
+            for (let i = 0; i < maxLen; i++) {
+                const box = document.getElementById(`box-${i}`);
+                if (!box) continue;
+
+                if (i < convertedText.length) {
+                    box.innerText = convertedText[i];
+                    box.className = "char-box w-10 h-12 md:w-12 md:h-14 border-2 rounded-lg flex items-center justify-center font-black text-xl md:text-2xl filled active";
+                } else {
+                    box.innerText = "";
+                    box.className = "char-box w-10 h-12 md:w-12 md:h-14 border-2 border-slate-600 bg-slate-800 rounded-lg flex items-center justify-center font-black text-xl md:text-2xl text-white shadow";
+                }
+            }
+        }
+
+        function resetHintUI() {
+            document.getElementById('hint-display').classList.add('hidden');
+            document.getElementById('hint-display').innerText = "";
+            for (let i = 1; i <= 3; i++) {
+                const btn = document.getElementById(`hint-${i}-btn`);
+                btn.disabled = false;
+                btn.classList.remove('opacity-40');
+            }
+        }
+
+        function useHint(num) {
+            if (usedHints[num - 1]) return;
+            usedHints[num - 1] = true;
+
+            const st = STATIONS[currentQuestions[qIndex]];
+            const disp = document.getElementById('hint-display');
+            disp.classList.remove('hidden');
+
+            let msg = "";
+            if (num === 1) {
+                msg = `【文字数・頭文字】文字数: ${st.kana.length}文字 / 最初の1文字: 「${st.kana[0]}」`;
+                score = Math.max(0, score - 100);
+            } else if (num === 2) {
+                msg = `【所属路線】${st.pref}・${st.line}`;
+                score = Math.max(0, score - 150);
+            } else if (num === 3) {
+                msg = `【隣接駅】前: ${st.prev} ⇦ 当駅 ⇨ 次: ${st.next}`;
+                score = Math.max(0, score - 200);
+            }
+
+            disp.innerText = msg;
+            document.getElementById(`hint-${num}-btn`).disabled = true;
+            document.getElementById(`hint-${num}-btn`).classList.add('opacity-40');
+            document.getElementById('score-counter').innerText = `スコア: ${score}`;
+            answerInput.focus();
+        }
+
+        function checkAnswer() {
+            const st = STATIONS[currentQuestions[qIndex]];
+            const userStr = parseRomajiToHiragana(answerInput.value.trim());
+
+            if (userStr === st.kana) {
+                // 正解
+                clearInterval(timer);
+                playSound('ok');
+                showOverlay('⭕', 'text-emerald-400');
+
+                // スコア計算: 残り時間ベース(最大200pt) + 基本正解(300pt)
+                const addScore = Math.round(300 + (timeLeft * 10));
+                score += addScore;
+
+                reviewData.push({ station: st, userAns: userStr, isCorrect: true, pts: addScore });
+                nextQuestion();
+            } else if (userStr.length >= st.kana.length) {
+                // 不正解演出
+                playSound('ng');
+                showOverlay('❌', 'text-rose-500');
+            }
+        }
+
+        function skipQuestion() {
+            clearInterval(timer);
+            playSound('ng');
+            const st = STATIONS[currentQuestions[qIndex]];
+            reviewData.push({ station: st, userAns: "パス", isCorrect: false, pts: 0 });
+            nextQuestion();
+        }
+
+        function timeOut() {
+            playSound('ng');
+            showOverlay('時間切れ', 'text-rose-500 text-6xl');
+            const st = STATIONS[currentQuestions[qIndex]];
+            reviewData.push({ station: st, userAns: "時間切れ", isCorrect: false, pts: 0 });
+            setTimeout(nextQuestion, 1200);
+        }
+
+        function showOverlay(symbol, colorClass) {
+            const el = document.getElementById('overlay-result');
+            const mark = document.getElementById('overlay-mark');
+            mark.innerText = symbol;
+            mark.className = `font-black drop-shadow-2xl ${colorClass}`;
+            el.style.opacity = '1';
+            setTimeout(() => { el.style.opacity = '0'; }, 800);
+        }
+
+        function nextQuestion() {
+            qIndex++;
+            if (qIndex < 10) {
+                setTimeout(loadQuestion, 600);
+            } else {
+                setTimeout(finishGame, 800);
+            }
+        }
+
+        function finishGame() {
+            document.getElementById('screen-game').classList.add('hidden');
+            document.getElementById('screen-result').classList.remove('hidden');
+            document.getElementById('screen-result').classList.add('flex');
+
+            document.getElementById('result-score').innerHTML = `${score} <span class="text-lg font-normal text-slate-300">点</span>`;
+
+            // 評価メッセージ
+            let evalMsg = "";
+            if (score >= 4000) evalMsg = "🏆 伝説の全国難読駅名マスター！";
+            else if (score >= 2800) evalMsg = "🎖️ 鉄道駅名博士クラス！";
+            else if (score >= 1500) evalMsg = "🚃 かなりの鉄道通！";
+            else evalMsg = "🔰 これから全国の駅を覚えていこう！";
+            document.getElementById('result-evaluation').innerText = evalMsg;
+
+            // ハイスコア更新
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('nandoku_highscore', highScore.toString());
+                document.getElementById('high-score-display').innerText = `BEST: ${highScore} pt`;
+            }
+
+            // 振り返りリスト作成
+            const listContainer = document.getElementById('review-list');
+            listContainer.innerHTML = "";
+            reviewData.forEach((item, idx) => {
+                const row = document.createElement('div');
+                row.className = "flex justify-between items-center bg-slate-800/80 p-2 rounded border border-slate-700/60";
+                row.innerHTML = `
+                    <div>
+                        <span class="font-bold text-white mr-2">${idx + 1}. ${item.station.kanji}</span>
+                        <span class="text-emerald-400 font-semibold">(${item.station.kana})</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="${item.isCorrect ? 'text-emerald-400 font-bold' : 'text-rose-400'}">${item.isCorrect ? '⭕ 正解' : '❌ ' + item.userAns}</span>
+                        <span class="text-slate-400 text-[10px] block">+${item.pts} pt</span>
+                    </div>
+                `;
+                listContainer.appendChild(row);
+            });
+        }
+    </script>
+</body>
+</html>
